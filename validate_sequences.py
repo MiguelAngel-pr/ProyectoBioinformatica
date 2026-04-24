@@ -12,7 +12,7 @@ def validate_sequences(input_fasta: str) -> None:
     valid_bases = set("ACGT")
     for rec in records: # Bases diferentes a A, C, G, T
         if not set(str(rec.seq)).issubset(valid_bases):
-            raise ValueError(f"Secuencia {rec.id} contiene caracteres inválidos")
+            raise ValueError(f"Secuencia {rec.id} contiene caracteres invalidos")
 
     if len(set(lengths)) == 1: # Todas las secuencias tienen la misma longitud
         print(f"Archivo validado")
