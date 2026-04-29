@@ -12,7 +12,7 @@ class Node:
         return self.left is None and self.right is None
 
 
-def read_distance_matrix(file_path: str): #a partir del csv forma la matriz de distancias evolutivas para usarla en el algoritmo UPGMA
+def read_distance_matrix(file_path: str):
     with open(file_path, newline="", encoding="utf-8") as f:
         reader = list(csv.reader(f))
 
@@ -28,16 +28,14 @@ def read_distance_matrix(file_path: str): #a partir del csv forma la matriz de d
     return matrix
 
 
-def upgma(distance_matrix: dict): #Construye un arbol filogenetico jerarquico uniendo en cada paso los dos clusteres mas cercanos.
-    
-    # Empezamos con un nodo hoja por cada secuencia
+def upgma(distance_matrix: dict):
     clusters = {name: Node(name) for name in distance_matrix.keys()}
 
     # Copia profunda de la matriz para no modificar el original
     distances = {a: dict(row) for a, row in distance_matrix.items()}
 
     while len(clusters) > 1:
-        # Encontramos el par con distancia mínima
+        # --- Encontrar el par con distancia mínima ---
         min_dist = float("inf")
         pair = None
 
@@ -52,45 +50,70 @@ def upgma(distance_matrix: dict): #Construye un arbol filogenetico jerarquico un
 
         a, b = pair
 
-        # Guardamos claves antes de modificar clusters
+        # --- Guardar claves ANTES de modificar clusters ---
+        # Excluimos a y b; el nuevo nodo todavía no existe
         remaining = [k for k in clusters if k != a and k != b]
 
-        # Creamos nuevo nodo interno que une a y b
+        # --- Crear nuevo nodo interno ---
         new_name = f"({a},{b})"
         new_node = Node(new_name, clusters[a], clusters[b], height=min_dist / 2)
 
-        # Actualizamos distancias al nuevo clúster
+        # --- Actualizar distancias al nuevo clúster ---
         distances[new_name] = {}
         for k in remaining:
             dist = (distances[a][k] + distances[b][k]) / 2
             distances[new_name][k] = dist
             distances[k][new_name] = dist
-
         distances[new_name][new_name] = 0.0
 
-        # Limpiamos entradas antiguas, quitando a y b
+        # --- Limpiar entradas antiguas ---
         distances.pop(a, None)
         distances.pop(b, None)
         for k in distances:
             distances[k].pop(a, None)
             distances[k].pop(b, None)
 
-        # Actualizamos los clusters
+        # --- Actualizar clusters ---
         del clusters[a]
         del clusters[b]
         clusters[new_name] = new_node
 
     return list(clusters.values())[0]
 
+def worst_tree_extremo(distance_matrix: dict):
+    species = list(distance_matrix.keys())
+
+    # 🔥 ordenar especies por distancia total (las más "raras" primero)
+    def suma_distancias(sp):
+        return sum(distance_matrix[sp].values())
+
+    species.sort(key=suma_distancias, reverse=True)
+
+    # 🔥 construir árbol en cadena (peor estructura)
+    current = Node(species[0])
+
+    for i in range(1, len(species)):
+        new_leaf = Node(species[i])
+
+        # altura artificial alta (peor aún)
+        new_height = max(distance_matrix[species[i]].values())
+
+        current = Node(
+            f"({current.name},{new_leaf.name})",
+            left=current,
+            right=new_leaf,
+            height=new_height
+        )
+
+    return current
+
 
 def print_tree(node, level=0):
     indent = "  " * level
-    if node.is_leaf(): #Nombre Secuencia
+    if node.is_leaf():
         print(f"{indent}{node.name}  (h={node.height:.4f})")
-    else: #Altura del nodo interno
+    else:
         print(f"{indent}[nodo interno h={node.height:.4f}]")
-
-    # Recorremos recursivamente los hijos
     if node.left:
         print_tree(node.left, level + 1)
     if node.right:
@@ -98,7 +121,7 @@ def print_tree(node, level=0):
 
 
 if __name__ == "__main__":
-    matrix = read_distance_matrix("dataset/evo_distances.csv")
+    matrix = read_distance_matrix("dataset/jc_distances.csv")
     tree = upgma(matrix)
     print("Árbol UPGMA:")
     print_tree(tree)

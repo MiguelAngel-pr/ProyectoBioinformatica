@@ -70,24 +70,60 @@ def transition_matrix(d: float):
 
     return matrix
 
-def write_transition_matrix(d: float, output_csv: str):
-    matrix = transition_matrix(d)
+def write_transition_matrix(evo_csv: str, output_csv: str):
+        # --- Leer la matriz de distancias evolutivas ---
+    with open(evo_csv, newline="", encoding="utf-8") as f:
+        reader = list(csv.reader(f))
+ 
+    names = reader[0][1:]  # nombres de las secuencias (cabecera sin la primera celda)
+ 
+    # Construir dict {seq_a: {seq_b: distancia}}
+    evo_matrix = {}
+    for i in range(1, len(reader)):
+        row_name = reader[i][0]
+        evo_matrix[row_name] = {}
+        for j in range(1, len(reader[i])):
+            evo_matrix[row_name][names[j - 1]] = float(reader[i][j])
+ 
     bases = ["A", "C", "G", "T"]
-
+ 
+    # --- Generar una matriz de transicion por par unico ---
+    rows_to_write = []
+    pair_count    = 0
+ 
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):  # solo triangulo superior: evita duplicados y diagonal
+            seq_a = names[i]
+            seq_b = names[j]
+            d     = evo_matrix[seq_a][seq_b]
+ 
+            pair_count += 1
+ 
+            # Titulo del par
+            rows_to_write.append([f"Par {pair_count}: {seq_a} vs {seq_b}  (d = {d:.6f})"])
+ 
+            if d == float("inf"):
+                # Distancia no estimable: no podemos calcular la matriz
+                rows_to_write.append(["Distancia no estimable (p >= 0.75)"])
+            else:
+                mat = transition_matrix(d)
+                # Cabecera de bases
+                rows_to_write.append([""] + bases)
+                # Filas de la matriz
+                for b1 in bases:
+                    row = [b1] + [f"{mat[b1][b2]:.6f}" for b2 in bases]
+                    rows_to_write.append(row)
+ 
+            # Fila vacia separadora entre matrices
+            rows_to_write.append([])
+ 
+    # --- Escribir todo en el CSV de salida ---
     with open(output_csv, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-
-        # cabecera
-        writer.writerow([""] + bases)
-
-        # filas
-        for b1 in bases:
-            row = [b1] + [f"{matrix[b1][b2]:.6f}" for b2 in bases]
-            writer.writerow(row)
-
-    print(f"Matriz de transicion escrita en: {output_csv}")
+        writer.writerows(rows_to_write)
+ 
+    print(f"{pair_count} matrices de transicion escritas en: {output_csv}")
 
 if __name__ == "__main__":
     distance_matrix("dataset/p_distances.csv", "dataset/evo_distances.csv")
-    d = distance_from_csv("dataset/evo_distances.csv")
-    write_transition_matrix(d, "dataset/transition_matrix.csv")
+    write_transition_matrix("dataset/evo_distances.csv", "dataset/transition_matrix.csv")
