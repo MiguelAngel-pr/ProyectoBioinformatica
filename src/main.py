@@ -55,13 +55,12 @@ def main():
         matrix_dist_bloques, matrix_prob = read_all_data(args.matrices)
         matrix_tabla = read_distance_matrix(args.input)
 
-        #nombres_especies = list(matrix_tabla.keys())
         
-        #tree_ini = worst_tree(nombres_especies)
+        #tree_ini = worst_tree(list(matrix_tabla.keys())) # Arbol medio aleatorio para peor visualización
 
-        tree_ini = worst_tree_extremo(matrix_tabla) 
+        #tree_ini = worst_tree_extremo(matrix_tabla) # Arbol extremo para peor visualización (si queremos algo aún más caótico que el aleatorio)
 
-        #tree_ini = upgma(matrix_tabla)
+        tree_ini = upgma(matrix_tabla) # Arbol UPGMA como punto de partida (si queremos comparar con el resultado de UPGMA)
 
         # Ejecutamos la simulación recuperando los nuevos valores
         best_tree, best_score, historial, ultimos_5 = metropolis(

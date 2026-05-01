@@ -1,4 +1,5 @@
 ﻿import csv
+import random
 
 
 class Node:
@@ -82,27 +83,24 @@ def upgma(distance_matrix: dict):
 
 def worst_tree_extremo(distance_matrix: dict):
     species = list(distance_matrix.keys())
+    # Aleatoriedad real
+    random.shuffle(species)
 
-    # ordenar especies por distancia total (las más "raras" primero)
-    def suma_distancias(sp):
-        return sum(distance_matrix[sp].values())
-
-    species.sort(key=suma_distancias, reverse=True)
-
-    # construir árbol en cadena (peor estructura)
-    current = Node(species[0])
+    # Empezamos con la primera especie aleatoria
+    current = Node(species[0], height=0)
 
     for i in range(1, len(species)):
-        new_leaf = Node(species[i])
+        new_leaf = Node(species[i], height=0)
+        
+        # Distancia aleatoria o extrema para peor visualización
+        dist_extrema = random.uniform(10, 100) 
 
-        # altura artificial alta (peor aún)
-        new_height = max(distance_matrix[species[i]].values())
-
+        # Creamos un ancestro común que siempre se inclina a un lado
         current = Node(
-            f"({current.name},{new_leaf.name})",
+            name=f"ancestro_{i}",
             left=current,
             right=new_leaf,
-            height=new_height
+            height=dist_extrema
         )
 
     return current

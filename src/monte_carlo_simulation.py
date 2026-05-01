@@ -171,64 +171,56 @@ def generate_neighbor(tree):
     return nuevo_arbol
 
 # ALGORITMO PRINCIPAL (METROPOLIS)
-def metropolis(tree, d_reales, m_probs, iteraciones=100000, beta=100.0, paciencia=30000):
-    # --- INICIALIZACIÓN ---
+def metropolis(tree, d_reales, m_probs, iteraciones=100000, beta=500.0, paciencia=20000):
     actual = tree
     score_actual = score(actual, d_reales, m_probs)
-    mejor_score = score_actual
+    
+    # Estos son tus seguros de vida: nunca se pierden
     mejor_arbol = copy.deepcopy(actual)
+    mejor_score = score_actual
+    
     historial_scores = []
-    ultimos_mejores = []
-    espera = 0 # Contador para el criterio de parada (paciencia)
-
+    ultimos_mejores = [(copy.deepcopy(mejor_arbol), mejor_score)]
+    espera = 0 
+    
     for i in range(iteraciones):
-        # --- GENERACIÓN DE PROPUESTA ---
-        # Creamos un árbol vecino modificando el actual
         vecino = generate_neighbor(actual)
         score_vecino = score(vecino, d_reales, m_probs)
         
-        # --- REGLA DE ACEPTACIÓN ---
-        # 1. Si el vecino es mejor (score menor), aceptamos siempre
+        # Aceptación
         if score_vecino < score_actual:
             actual = vecino
             score_actual = score_vecino
+            
+            # ACTUALIZACIÓN DEL RÉCORD ABSOLUTO
+            if score_actual < (mejor_score - 1e-9):
+                mejor_score = score_actual
+                mejor_arbol = copy.deepcopy(actual)
+                espera = 0  # Solo aquí reseteamos de verdad
+                ultimos_mejores.append((copy.deepcopy(mejor_arbol), mejor_score))
+                if len(ultimos_mejores) > 5: ultimos_mejores.pop(0)
         else:
-            # 2. Si el vecino es peor, solo lo aceptamos bajo ciertas condiciones
-            # Condición A: No permitimos que el error suba más de un 10% del mejor récord histórico.
-            # Esto actúa como un "techo" para que la gráfica no se dispare hacia arriba.
-            if score_vecino < (mejor_score * 1.10): 
-                diff = score_vecino - score_actual
-                try:
-                    # Condición B: Criterio de Metrópolis. 
-                    # Cuanto mayor sea 'beta', menor es la probabilidad de aceptar este error.
-                    # Al dejar 'beta' fijo, la "agresividad" de búsqueda es constante.
-                    prob = math.exp(-beta * (diff / (mejor_score + 1e-10)))
-                except: 
-                    prob = 0
-                
-                # Decisión aleatoria basada en la probabilidad calculada
-                if random.random() < prob:
-                    actual = vecino
-                    score_actual = score_vecino
-        
-        # Guardamos el score actual para la gráfica de convergencia
+            # Metrópolis
+            diff = score_vecino - score_actual
+            prob = math.exp(-beta * (diff / (mejor_score + 1e-10)))
+            if random.random() < prob:
+                actual = vecino
+                score_actual = score_vecino
+            
+            espera += 1
+
         historial_scores.append(score_actual)
 
-        # --- CONTROL DEL RÉCORD ---
-        if score_actual < mejor_score:
-            mejor_score = score_actual
-            mejor_arbol = copy.deepcopy(actual)
-            espera = 0 # Reiniciamos la paciencia porque hemos mejorado
-            ultimos_mejores.append((copy.deepcopy(mejor_arbol), mejor_score))
-            if len(ultimos_mejores) > 5: ultimos_mejores.pop(0)
-        else:
-            espera += 1 # Aumentamos la espera si no hay mejora
-            
-        # --- CRITERIO DE PARADA TEMPRANA ---
-        # Si llevamos 'paciencia' iteraciones sin mejorar el récord, paramos.
-        if espera >= paciencia: 
+        # REINICIO TÉCNICO (Solo si estamos muy estancados)
+        if espera == 10000 and len(ultimos_mejores) > 1:
+            # Volvemos al mejor conocido para intentar otra mutación
+            actual, score_actual = copy.deepcopy(mejor_arbol), mejor_score
+            print(f" > Iteración {i}: Re-explorando desde el mejor árbol conocido...")
+
+        if espera >= paciencia:
             break
             
+    # CRUCIAL: Devolvemos el récord, no el último estado
     return mejor_arbol, mejor_score, historial_scores, ultimos_mejores
 
 
@@ -263,7 +255,7 @@ def graficar_convergencia(historial):
     
     # Ajustamos el eje X cada 10.000
     import matplotlib.ticker as ticker
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(10000))
+    ax.xaxis.set_major_locator(ticker.MultipleLocator(20000))
     
     # Límites de Y que permitan ver toda la caída exponencial
     plt.ylim(min(historial)*0.5, max(historial)*1.5)
@@ -274,10 +266,10 @@ def graficar_convergencia(historial):
 
     plt.title("Convergencia MCMC: Curva Exponencial Orgánica", loc='left', fontsize=14)
     plt.xlabel("Iteraciones", fontsize=11)
-    plt.ylabel("Score (Log Scale)", fontsize=11)
+    plt.ylabel("Error score", fontsize=11)
 
     plt.tight_layout()
-    plt.savefig("dataset/convergencia_mc.png", dpi=300)
+    plt.savefig("graficas/convergencia_mc.png", dpi=300)
     print("\n Grafica de convergencia guardada como 'convergencia_mc.png'")
     plt.close()
 
@@ -306,7 +298,7 @@ def graficar_distribucion_scores(historial):
     plt.grid(axis='y', ls='--', alpha=0.2)
 
     plt.tight_layout()
-    plt.savefig("dataset/distribucion_scores.png", dpi=300)
+    plt.savefig("graficas/distribucion_scores.png", dpi=300)
     print("\n Distribución de scores guardada como 'distribucion_scores.png'")
     plt.close()
 
@@ -360,7 +352,7 @@ def graficar_comparativa_calor(matriz_real_dict, arbol_final):
     ax2.set_title("Distancias del Árbol (Optimizado)")
     
     plt.tight_layout()
-    plt.savefig("dataset/comparativa_calor.png")
+    plt.savefig("graficas/comparativa_calor.png", dpi=300)
     print("\n Mapa de calor guardado como 'comparativa_calor.png'")
     plt.close()
 
