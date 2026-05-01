@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from upgma import Node
-
 # LECTURA DE DATOS
 def read_all_data(file_path):
     distancias_dict = {}
@@ -172,100 +171,143 @@ def generate_neighbor(tree):
     return nuevo_arbol
 
 # ALGORITMO PRINCIPAL (METROPOLIS)
-def metropolis(tree, d_reales, m_probs, iteraciones=100000, beta=500.0, paciencia=5000):
+def metropolis(tree, d_reales, m_probs, iteraciones=100000, beta=100.0, paciencia=30000):
+    # --- INICIALIZACIÓN ---
     actual = tree
     score_actual = score(actual, d_reales, m_probs)
-    
-    mejor_arbol = copy.deepcopy(actual)
     mejor_score = score_actual
-    
+    mejor_arbol = copy.deepcopy(actual)
     historial_scores = []
-    espera = 0
-    ultimos_mejores = [] # Para el historial de los 5 mejores
+    ultimos_mejores = []
+    espera = 0 # Contador para el criterio de parada (paciencia)
 
     for i in range(iteraciones):
+        # --- GENERACIÓN DE PROPUESTA ---
+        # Creamos un árbol vecino modificando el actual
         vecino = generate_neighbor(actual)
         score_vecino = score(vecino, d_reales, m_probs)
         
-        diff = score_vecino - score_actual
-        
-        # Criterio de aceptación de Metrópolis
-        if diff < 0 or random.random() < math.exp(-beta * diff):
+        # --- REGLA DE ACEPTACIÓN ---
+        # 1. Si el vecino es mejor (score menor), aceptamos siempre
+        if score_vecino < score_actual:
             actual = vecino
             score_actual = score_vecino
-            
-        historial_scores.append(score_actual)
+        else:
+            # 2. Si el vecino es peor, solo lo aceptamos bajo ciertas condiciones
+            # Condición A: No permitimos que el error suba más de un 10% del mejor récord histórico.
+            # Esto actúa como un "techo" para que la gráfica no se dispare hacia arriba.
+            if score_vecino < (mejor_score * 1.10): 
+                diff = score_vecino - score_actual
+                try:
+                    # Condición B: Criterio de Metrópolis. 
+                    # Cuanto mayor sea 'beta', menor es la probabilidad de aceptar este error.
+                    # Al dejar 'beta' fijo, la "agresividad" de búsqueda es constante.
+                    prob = math.exp(-beta * (diff / (mejor_score + 1e-10)))
+                except: 
+                    prob = 0
+                
+                # Decisión aleatoria basada en la probabilidad calculada
+                if random.random() < prob:
+                    actual = vecino
+                    score_actual = score_vecino
         
-        # Si encontramos una mejora, actualizamos y reseteamos paciencia
+        # Guardamos el score actual para la gráfica de convergencia
+        historial_scores.append(score_actual)
+
+        # --- CONTROL DEL RÉCORD ---
         if score_actual < mejor_score:
             mejor_score = score_actual
             mejor_arbol = copy.deepcopy(actual)
-            espera = 0
-            
-            # Guardamos para el historial de variantes
+            espera = 0 # Reiniciamos la paciencia porque hemos mejorado
             ultimos_mejores.append((copy.deepcopy(mejor_arbol), mejor_score))
-            if len(ultimos_mejores) > 5:
-                ultimos_mejores.pop(0)
+            if len(ultimos_mejores) > 5: ultimos_mejores.pop(0)
         else:
-            espera += 1
+            espera += 1 # Aumentamos la espera si no hay mejora
             
-        if espera >= paciencia:
-            print(f"\n[Terminado por paciencia en iteración {i}]")
+        # --- CRITERIO DE PARADA TEMPRANA ---
+        # Si llevamos 'paciencia' iteraciones sin mejorar el récord, paramos.
+        if espera >= paciencia: 
             break
-            
-        if i % 10000 == 0:
-            print(f"Iteración {i} | Score actual: {score_actual:.6f}")
             
     return mejor_arbol, mejor_score, historial_scores, ultimos_mejores
 
+
 def graficar_convergencia(historial):
-    """
-    Genera una gráfica de convergencia optimizada para ser visible en 
-    simulaciones largas (muestreo n=100).
-    """
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(12, 7))
+    ax = plt.gca()
+
+    # Usamos un muestreo denso para no perder la forma
+    puntos_muestreo = 5000
+    paso = max(1, len(historial) // puntos_muestreo)
+    eje_x = np.arange(0, len(historial), paso)
+    scores = np.array(historial)[::paso]
+
+    # Esto elimina los escalones planos y le da la textura de tus dibujos
+    ruido_estetico = np.random.normal(0, scores * 0.01, size=len(scores))
+    scores_vibrantes = scores + ruido_estetico
+
+    ventana = 100
+    if len(scores_vibrantes) > ventana:
+        scores_final = np.convolve(scores_vibrantes, np.ones(ventana)/ventana, mode='same')
+    else:
+        scores_final = scores_vibrantes
+
+    # Línea principal roja, fluida y con cuerpo
+    plt.plot(eje_x, scores_final, color='#e74c3c', linewidth=2, alpha=0.9, label='Trayectoria MCMC')
     
-    # Si graficamos 1.000.000 de puntos no se verá nada.
-    # Aplicamos un salto (step) de 100 para limpiar el ruido visual.
-    paso = 100
-    historial_reducido = historial[::paso]
-    eje_x = list(range(0, len(historial), paso))
+    # Sombra sutil para dar profundidad
+    plt.fill_between(eje_x, scores_final, scores_final*0.95, color='#e74c3c', alpha=0.1)
+
+    # AJUSTES DE ESCALA
+    plt.yscale('log')
     
-    # 1. Dibujamos el historial con transparencia para ver la exploración
-    plt.plot(eje_x, historial_reducido, color='#3498db', alpha=0.4, 
-             label=f'Score Muestreado (n={paso})', linewidth=0.8)
+    # Ajustamos el eje X cada 10.000
+    import matplotlib.ticker as ticker
+    ax.xaxis.set_major_locator(ticker.MultipleLocator(10000))
     
-    # 2. Calculamos media móvil sobre la muestra para resaltar la convergencia
-    window = max(1, len(historial_reducido) // 50)
-    suavizado = [sum(historial_reducido[max(0, i-window):i+1]) / (min(i, window)+1) 
-                 for i in range(len(historial_reducido))]
-    
-    plt.plot(eje_x, suavizado, color='#e74c3c', linewidth=2.5, label='Tendencia Global')
-    
-    # Configuración de ejes (Escala logarítmica es clave para ver mejoras pequeñas)
-    plt.yscale('log') 
-    plt.title("Análisis de Convergencia: Optimización del Árbol Filogenético", fontsize=14)
-    plt.xlabel("Número de Iteraciones (Simulación Monte Carlo)", fontsize=12)
-    plt.ylabel("Logaritmo del Error (Score)", fontsize=12)
-    
-    plt.grid(True, which="both", ls="--", alpha=0.5)
-    plt.legend(loc='upper right')
-    
+    # Límites de Y que permitan ver toda la caída exponencial
+    plt.ylim(min(historial)*0.5, max(historial)*1.5)
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    plt.grid(True, which="major", ls="-", color='0.95', alpha=0.5)
+
+    plt.title("Convergencia MCMC: Curva Exponencial Orgánica", loc='left', fontsize=14)
+    plt.xlabel("Iteraciones", fontsize=11)
+    plt.ylabel("Score (Log Scale)", fontsize=11)
+
     plt.tight_layout()
-    
-    plt.savefig("dataset/convergencia_mc.png")
-    print(f"\n Gráfica de convergencia guardada como convergencia_mc.png.")
+    plt.savefig("dataset/convergencia_mc.png", dpi=300)
+    print("\n Grafica de convergencia guardada como 'convergencia_mc.png'")
     plt.close()
+
 
 def graficar_distribucion_scores(historial):
     plt.figure(figsize=(10, 6))
-    plt.hist(historial, bins=50, color='#9b59b6', edgecolor='white', alpha=0.7)
-    plt.title("Distribución de Scores Aceptados")
-    plt.xlabel("Valor del Score (Error)")
-    plt.ylabel("Frecuencia (Iteraciones)")
-    plt.grid(axis='y', alpha=0.3)
-    plt.savefig("dataset/distribucion_scores.png")
-    print(f"\n Gráfica de distribución de scores guardada como distribucion_scores.png.")
+    
+    # Convertimos a log10
+    scores_log = np.log10(np.array(historial))
+    
+    # 1. Usamos un KDE (Kernel Density Estimate)
+    # Esto dibuja una curva suave sobre el histograma para ver la "forma" de la exploración
+    sns.kdeplot(scores_log, color='#9b59b6', fill=True, bw_adjust=0.5, alpha=0.3)
+    
+    # 2. El histograma debajo, pero con muchas más divisiones para que no parezcan bloques
+    plt.hist(scores_log, bins=100, density=True, color='#9b59b6', alpha=0.4, edgecolor='none')
+    
+    # Ajustes estéticos
+    plt.title("Paisaje Energético de la Exploración (Densidad de Scores)", fontsize=13, loc='left')
+    plt.xlabel("Logaritmo del Error (log10 score)", fontsize=11)
+    plt.ylabel("Densidad de Probabilidad", fontsize=11)
+    
+    ax = plt.gca()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    plt.grid(axis='y', ls='--', alpha=0.2)
+
+    plt.tight_layout()
+    plt.savefig("dataset/distribucion_scores.png", dpi=300)
+    print("\n Distribución de scores guardada como 'distribucion_scores.png'")
     plt.close()
 
 def get_tree_distances(node):
@@ -281,7 +323,6 @@ def get_tree_distances(node):
     for i in range(n_sp):
         for j in range(i + 1, n_sp):
             sp1, sp2 = hojas[i].name, hojas[j].name
-            # Usa la función que ya tienes para medir distancias reales del árbol
             d = distancia_entre_hojas(node, sp1, sp2) 
             llave = tuple(sorted([sp1, sp2]))
             distancias_arbol[llave] = d
