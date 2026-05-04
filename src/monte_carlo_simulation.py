@@ -171,7 +171,7 @@ def generate_neighbor(tree):
     return nuevo_arbol
 
 # ALGORITMO PRINCIPAL (METROPOLIS)
-def metropolis(tree, d_reales, m_probs, iteraciones=100000, beta=500.0, paciencia=20000):
+def metropolis(tree, d_reales, m_probs, iteraciones, beta, paciencia):
     actual = tree
     score_actual = score(actual, d_reales, m_probs)
     
